@@ -215,13 +215,13 @@ def Multi_Integration_Paradigm(Integration_list_MilSec, Integration_Buffer_Time,
             P_Timer = Process(target=Timer_Multi_Process, args=(Integration_list_MilSec[Spectrometer_Index[0]-1]/float(1000),))
             P_Timer.start()
             DAQ1.writePort(Chosen_Shutter, Open_Shutter)
-            #Ref_Time[DAQ_Index[0]] = time.time()
+            Ref_Time[DAQ_Index[0]] = time.time()
             print ('Step2, Raising edge has started',  time.time())
             Process_Order = 1
         elif(Timer_Is_Over.value == 1) and (Process_Order == 1):
             DAQ1.writePort(Chosen_Shutter, Close_Shutter)
             print ('Step3, Falling edge has started',  time.time())
-            #Ref_Time[DAQ_Index[0]] = time.time()
+            Ref_Time[DAQ_Index[0]] = time.time()
             Timer_Is_Over.value = 0
             Process_Order = 2
         elif(Spectrometer_is_read.value == 1) and (Process_Order == 2):
@@ -230,7 +230,7 @@ def Multi_Integration_Paradigm(Integration_list_MilSec, Integration_Buffer_Time,
             #Full_Spec_Records[:, np.int(Spectrometer_Index[0])] = Current_Spec_Record[:]
             #Spectrometer_Index[0] = Spectrometer_Index[0]  + 1
             #if (Spectrometer_Index[0] == len(Integration_list_MilSec)):
-            #    break
+                #break
 
             Timer_Is_Over.value = 0
             P_Timer = Process(target=Timer_Multi_Process, args=(Integration_Buffer_Time/float(1000),))
@@ -242,18 +242,18 @@ def Multi_Integration_Paradigm(Integration_list_MilSec, Integration_Buffer_Time,
         DAQ_Signal[DAQ_Index[0]], DAQ_Time[DAQ_Index[0]] = DAQ1.readPort(PhotoDiode_Port)
         #print (DAQ_Signal[DAQ_Index[0]])
         DAQ_Index[0] = DAQ_Index[0] + 1
-        #Ref_Time[DAQ_Index[0]] = time.time()
+        Ref_Time[DAQ_Index[0]] = time.time()
     Pros_Spec.terminate()
 
     Timer_Is_Over.value = 0
     P_Timer = Process(target=Timer_Multi_Process, args=(Integration_Buffer_Time/float(1000),))
     P_Timer.start()
-    print ('time of Timer start %output_file:' %time.time())
+    print ('time of Timer start %f output_file:' %time.time())
     while  Timer_Is_Over.value == 0: #Not over
         DAQ_Signal[DAQ_Index[0]], DAQ_Time[DAQ_Index[0]] = DAQ1.readPort(PhotoDiode_Port)
         #print (DAQ_Signal[DAQ_Index[0]])
         DAQ_Index[0] = DAQ_Index[0] + 1
-        #Ref_Time[DAQ_Index[0]] = time.time()
+        Ref_Time[DAQ_Index[0]] = time.time()
     P_Timer.terminate()
     if (Power_meter.Error == 0):
         Pros_Power.terminate()
@@ -393,7 +393,8 @@ def Perform_Test():
     Max_Wave_Index = bisect.bisect(Wavelengths, float(max_length.get()))
     Wavelengths = Wavelengths[Min_Wave_Index:Max_Wave_Index]
 
-    #Current_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths) ,1), dtype = float ))
+    global Current_Spec_Record
+    Current_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths) ,1), dtype = float ))
     Number_of_Spec_Tests = 500
     Full_Spec_Records2 = Array('d', np.zeros(shape=( len(Wavelengths)*Number_of_Spec_Tests ,1), dtype = float ))
     Spec_Time = Array('d', np.zeros(shape=(Number_of_Spec_Tests ,1), dtype = float ))
@@ -447,13 +448,13 @@ def Perform_Test():
         Full_Spec_Records2= Array('d', np.zeros(shape=(len(Wavelengths)*Number_of_Spectrometer_Samples ,1), dtype = float))
         Spec_Time   = Array('d', np.zeros(shape=(Number_of_Spectrometer_Samples, 1), dtype = float))
 
-        global DAQ_Signal, DAQ_Time, DAQ_Index
+        global DAQ_Signal, DAQ_Time, DAQ_Index, DAQ_Index_Total, Ref_Signal, Ref_Time
         DAQ_Signal = Array('d', np.zeros(shape=(Number_of_DAC_Samples, 1), dtype = float))
         DAQ_Time   = Array('d', np.zeros(shape=(Number_of_DAC_Samples, 1), dtype = float))
         DAQ_Index  = Array('i', np.zeros(shape=( 1 ,1), dtype = int))
-        #DAQ_Index_Total  = Array('i', np.zeros(shape=( 1 ,1), dtype = int))
-        #Ref_Signal = Array('d', np.zeros(shape=(Number_of_DAC_Samples, 1), dtype = float))
-        #Ref_Time   = Array('d', np.zeros(shape=(Number_of_DAC_Samples, 1), dtype = float))
+        DAQ_Index_Total  = Array('i', np.zeros(shape=( 1 ,1), dtype = int))
+        Ref_Signal = Array('d', np.zeros(shape=(Number_of_DAC_Samples, 1), dtype = float))
+        Ref_Time   = Array('d', np.zeros(shape=(Number_of_DAC_Samples, 1), dtype = float))
 
         if Power_meter.Error == 0:
             global Power_Signal, Power_Time, Power_Index
@@ -475,8 +476,8 @@ def Perform_Test():
 
         # Loading the Spectrometer Array to a matrix before saving and plotting ###############
         Wave_len = len(Wavelengths)
-        for I in range(Spectrometer_Index[0]):
-            Full_Spec_Records[:, I] =  Full_Spec_Records2[I*Wave_len : (I + 1)*Wave_len ]
+        for i in range(Spectrometer_Index[0]):
+            Full_Spec_Records[:, i] =  Full_Spec_Records2[i*Wave_len : (i+1)*Wave_len ]
 
         # Closing the devices
         Spec_Details = Spec1.readDetails()
@@ -526,16 +527,15 @@ def Perform_Test():
             plt.title('Photo diode')
             plt.xlabel('Ellapsed time (s)')
             plt.ylabel('Voltage (v)')
-
-
-        '''
+        
         plt.figure()
+        '''
         plt.plot(Spec1.readWavelength()[2:],Full_Spec_Records[2:])
+        '''
         plt.title('Specrometer recordings')
         plt.xlabel('Wavelength (nano meter)')
         plt.ylabel('Intensity')
-        #plt.plot(np.asarray(Ref_Time[0:DAQ_Index[0]]) - DAQ_Time[0],Ref_Signal[0:DAQ_Index[0]])
-        '''
+        plt.plot(np.asarray(Ref_Time[0:DAQ_Index[0]]) - DAQ_Time[0],Ref_Signal[0:DAQ_Index[0]])
 
         # Estimate the latencies of the devices ###################################
         if plots[1].get() == 1:
@@ -545,7 +545,7 @@ def Perform_Test():
             DAQ_Latency[0] = 0
             for I in range(1,DAQ_Index[0]):
                 DAQ_Latency[I] = DAQ_Time[I] - DAQ_Time[I-1]
-            #plt.subplot(1,3,1)
+            plt.subplot(1,3,1)
             plt.plot(DAQ_Latency)
             plt.ylabel("Time (s)")
             plt.title("DAQ latencies")
@@ -569,7 +569,7 @@ def Perform_Test():
             Power_Latency[0] = 0
             for I in range(1,int(Power_Index[0])):
                 Power_Latency[I] = Power_Time[I] - Power_Time[I-1]
-            #plt.subplot(1,3,1)
+            plt.subplot(1,3,1)
             plt.plot(Power_Latency)
             plt.ylabel("Time (s)")
             plt.title("Power latencies")
