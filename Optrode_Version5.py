@@ -7,9 +7,9 @@ This code runs the Optrode version 2
 #%%
 import socket
 import subprocess
-import time
 import struct
 import os
+import os.path
 import sys
 import tempfile
 import glob
@@ -28,15 +28,14 @@ import SeaBreeze_Objective as SBO
 import ThorlabsPM100_Objective as P100
 import numpy as np
 import matplotlib.pyplot as plt
-import os.path
 #%%
 time_start =  time.time()
 
 #Naming the DAQ ports
 Blue_Laser = "FIO1"
-Blue_Shutter = "DAC0"
+Blue_Shutter = "DAC1"
 Green_Laser = "FIO0"
-Green_Shutter = "DAC1"
+Green_Shutter = "DAC0"
 
 #Initialising values
 Open_Shutter = 5
@@ -69,7 +68,7 @@ def DAQ_Speed_Test(Number_of_DAQ_Tests):
         I = I + 1
     Duration = time.time() - Start_Time
     Mean_Time = Duration/float(Number_of_DAQ_Tests)
-    print ('DAQ Analogue reading requires %output_file s per sample \n' %Mean_Time)
+    print ('DAQ Analogue reading requires %f output_file s per sample \n' %Mean_Time)
     return Mean_Time
 
 def Power_Speed_Test(Number_of_Power_Tests):
@@ -269,7 +268,7 @@ def Continuous_Paradigm(Integration_Continuous, Number_of_Spectrometer_Samples, 
     Spectrometer_is_read.value = 0 #Not Read
     Pros_Spec = Process(target=Spectrometer_Read_Process, args=(Number_of_Spectrometer_Samples,))
     Timer_Is_Over.value = 0 #Not Over
-    P_Timer = Process(target=Timer_Multi_Process, args=(0.1)) #
+    P_Timer = Process(target=Timer_Multi_Process, args=(0.1,)) #
     P_Timer.start()
     while  Timer_Is_Over.value == 0:
         DAQ_Signal[DAQ_Index[0]], DAQ_Time[DAQ_Index[0]] = DAQ1.readPort(PhotoDiode_Port)
@@ -385,7 +384,7 @@ def Perform_Test():
     DAQ1.writePort(Blue_Shutter, Close_Shutter)
 
     # Initializing the variables
-    Integration_list_ms = [8, 16, 32, 64, 128, 256, 512, 1024] #Integration time for the spectrometer in ms
+    Integration_list_MilSec = [8, 16, 32, 64, 128, 256, 512, 1024] #Integration time for the spectrometer in ms
     Shutter_Delay = 4  #ms
 
     Number_of_DAQ_Tests = 20000
@@ -597,7 +596,7 @@ def Perform_Test():
         but3.config(state=DISABLED)
         but4.config(state=DISABLED)
 
-        # If we clicked the 'change' button, quit loop, otherwise keep going.
+        # If we clicked the 'change' but, quit loop, otherwise keep going.
         if wait_var.get() == 2:
             but1.config(state=NORMAL)
             Disable_UI(root, False)
@@ -614,7 +613,7 @@ def Close_GUI():
 
 def Disable_UI(parent, disable=True):
     '''
-    Disables sections of UI that are not buttons. Functions recursively.
+    Disables sections of UI that are not buts. Functions recursively.
     '''
     for w in parent.winfo_children():
         if w.winfo_class() == "TEntry" or w.winfo_class() == "Radiobutton":
@@ -772,21 +771,21 @@ if __name__ == "__main__":
     erlbl = Message(framech, width=360, textvariable=error_msg, font=(None, 11))
     erlbl.grid(row=2, column=1, columnspan=3)
 
-    # Button frames
+    #Button frames
     frame5 = Frame(root)
     frame5.grid(row=3, column=0)
     frame6 = Frame(root)
     frame6.grid(row=4, column=0)
 
-    button1 = Button(frame5, text="Setup", command=Begin_Test)
-    button1.grid(row=1, column=1, padx=10, pady=10)
-    button2 = Button(frame5, text="Start", command=lambda: wait_var.set(0), state=DISABLED)
-    button2.grid(row=1, column=2, padx=10, pady=10)
-    button3 = Button(frame6, text="Re-run", command=lambda: wait_var.set(1), state=DISABLED)
-    button3.grid(row=1, column=1, padx=10, pady=10)
-    button4 = Button(frame6, text="Change", command=lambda: wait_var.set(2), state=DISABLED)
-    button4.grid(row=1, column=2, padx=10, pady=10)
-    button5 = Button(frame6, text="Close", command=Close_GUI)
-    button5.grid(row=1, column=3, padx=10, pady=10)
+    but1 = Button(frame5, text="Setup", command=Begin_Test)
+    but1.grid(row=1, column=1, padx=10, pady=10)
+    but2 = Button(frame5, text="Start", command=lambda: wait_var.set(0), state=DISABLED)
+    but2.grid(row=1, column=2, padx=10, pady=10)
+    but3 = Button(frame6, text="Re-run", command=lambda: wait_var.set(1), state=DISABLED)
+    but3.grid(row=1, column=1, padx=10, pady=10)
+    but4 = Button(frame6, text="Change", command=lambda: wait_var.set(2), state=DISABLED)
+    but4.grid(row=1, column=2, padx=10, pady=10)
+    but5 = Button(frame6, text="Close", command=Close_GUI)
+    but5.grid(row=1, column=3, padx=10, pady=10)
 
     root.mainloop()
