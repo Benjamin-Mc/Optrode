@@ -8,10 +8,11 @@ This code runs the Optrode version 2
 import socket
 import subprocess
 import struct
+import tempfile
+
 import os
 import os.path
 import sys
-import tempfile
 import glob
 import datetime
 import time
@@ -84,7 +85,7 @@ def Power_Speed_Test(Number_of_Power_Tests):
         I = I + 1
     Duration = time.time() - Start_Time
     Mean_Time = Duration/float(Number_of_Power_Tests)
-    print ('Power meter reading requires %output_file s per sample \n' %Mean_Time)
+    print ('Power meter reading requires %f output_file s per sample \n' %Mean_Time)
 
     return Mean_Time
 
@@ -113,7 +114,7 @@ def Spectrometer_Init_Process(Integration_Time, Trigger_mode):
     A function for initializing the spectrometer (integration time and triggering mode)
     Integration_Time is given in milliseconds
     '''
-    print 'Spectrometer is initialized'
+    print ("Spectrometer is initialised")
     Spec1.setTriggerMode(Trigger_mode)
     time.sleep(0.01)
     Spec1.setIntegrationTime(Integration_Time*1000) #Converted to Microseconds
@@ -170,7 +171,7 @@ def Spectrometer_Read_Process(Number_of_Spectrometer_Samples):
         Spec_Time[Spectrometer_Index[0]] = b
         Spectrometer_Index[0] = Spectrometer_Index[0] + 1
         Spectrometer_is_read.value = 1
-        #print ("spectrometer Index is %i" % Spectrometer_Index[0])
+        #print ("spectrometer Index is %i" %Spectrometer_Index[0])
         I = I + 1
 
 def Check_Output_Folder():
@@ -261,7 +262,6 @@ def Continuous_Paradigm(Integration_Continuous, Number_of_Spectrometer_Samples, 
     if (Power_meter.Error == 0): #No Error
         Pros_Power = Process(target=Power_Read_Process, args=(number_of_power_samples,))
         Pros_Power.start()
-    #Local_Spectrometer_Index = 0
     Spectrometer_Init_Done.value = 0 #Not Complete
     Pros_Spectrometer_Init = Process(target = Spectrometer_Init_Process, args=(Integration_Continuous, 0))
     Pros_Spectrometer_Init.start()
@@ -366,11 +366,7 @@ def Perform_Test():
     #Initialises values as integers equal to 0
     global Spectrometer_is_read, Spectrometer_Init_Done, DAQ_Is_Read, Power_Is_Read, Timer_Is_Over
     Spectrometer_is_read = Spectrometer_Init_Done = DAQ_Is_Read = Power_Is_Read = Timer_Is_Over = Value('i', 0)
-    #Check if superfluous Spectrometer_is_read.value = 0
-    #Spectrometer_Init_Done.value = 0
-    #DAQ_Is_Read.value = 0
-    #Power_Is_Read.value = 0
-    #Timer_Is_Over.value = 0
+    #Might have to initialise values to 0
 
     Integration_Time = 100                                        # Integration time in ms
     Spec1.setTriggerMode(3)                                       # It is set for free running mode
@@ -383,7 +379,7 @@ def Perform_Test():
     DAQ1.writePort(Green_Shutter, Close_Shutter)
     DAQ1.writePort(Blue_Shutter, Close_Shutter)
 
-    # Initializing the variables
+    # Initialising the variables
     Integration_list_MilSec = [8, 16, 32, 64, 128, 256, 512, 1024] #Integration time for the spectrometer in ms
     Shutter_Delay = 4  #ms
 
@@ -397,7 +393,7 @@ def Perform_Test():
     Max_Wave_Index = bisect.bisect(Wavelengths, float(max_length.get()))
     Wavelengths = Wavelengths[Min_Wave_Index:Max_Wave_Index]
 
-    Current_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths) ,1), dtype = float ))
+    #Current_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths) ,1), dtype = float ))
     Number_of_Spec_Tests = 500
     Full_Spec_Records2 = Array('d', np.zeros(shape=( len(Wavelengths)*Number_of_Spec_Tests ,1), dtype = float ))
     Spec_Time = Array('d', np.zeros(shape=(Number_of_Spec_Tests ,1), dtype = float ))
@@ -443,8 +439,8 @@ def Perform_Test():
 
     Rerun = 'First'
     while True:
-        ################################ Variables initializations #############################################
-        Current_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths), 1), dtype = float))
+        ################################ Variables initialisations #############################################
+        #Current_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths), 1), dtype = float))
         #Last_Spec_Record = Array('d', np.zeros(shape=(len(Wavelengths), 1), dtype = float))
         Spectrometer_Index = Array('i', np.zeros(shape=(1, 1), dtype = int))
         Full_Spec_Records = np.zeros(shape=(len(Wavelengths), Number_of_Spectrometer_Samples ), dtype = float)
@@ -520,7 +516,7 @@ def Perform_Test():
 
         output_file.close()
 
-        #Path_to_Fred_Codes = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+        #DELETE Path_to_Fred_Codes = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         #os.chdir(Path_to_Fred_Codes)
 
         # Plotting the spectrometer and the photodiode recordings
@@ -647,8 +643,11 @@ if __name__ == "__main__":
     '''
 
     # Checks all devices are connected and operational
+    print("")
     Spec1 = SBO.DetectSpectrometer()
+    print("")
     DAQ1 = DAQ.DetectDAQT7()
+    print("")
     Power_meter = P100.DetectPM100D()
 
     # Creating GUI

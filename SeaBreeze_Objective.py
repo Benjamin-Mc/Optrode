@@ -106,9 +106,8 @@ class DetectSpectrometer:
             sb.Spectrometer(devices[0]).close()
             self.Handle = sb.Spectrometer(devices[0])
             self.Error = 0
-            print (devices)
-            print ('Serial number:%s' % self.Handle.serial_number)
-            print ('Model:%s' % self.Handle.model)
+            print ('Serial number: %s' % self.Handle.serial_number)
+            print ('Model: %s' % self.Handle.model)
             print ('minimum_integration_time_micros: %s microseconds' % self.Handle.minimum_integration_time_micros)
             self.clear()
             self.Error = 0
