@@ -159,7 +159,6 @@ def Spectrometer_Read_Process(num_Spectrometer_Samples):
     '''
     for i in range(num_Spectrometer_Samples):
         Intensity, Time = Spec1.readIntensity(True, True) #Returns the intensity value and time at which it was taken
-        Current_Spec_Record = Spec1.readWavelength
         Intensity_Array = np.asanyarray(Intensity)
         Intensity_Matrix = np.ndarray.reshape(Intensity_Array, (len(Intensity_Array), 1))
         Full_Spec_Records[:, Spectrometer_Index[0]] = Intensity_Matrix[Min_Wave_Index:Max_Wave_Index]
@@ -277,7 +276,6 @@ def Continuous_Paradigm(Integration_Continuous, num_Spectrometer_Samples, num_DA
 
     Pros_DAQ = Process(target=DAQ_Read_Process, args=(num_DAC_Samples,))
     Pros_DAQ.start()
-    Pros_DAQ.join()
     Last_DAQ_Signals = 0 # This is a flag bit used to detect the last part of the continuous recording
     while (int(Spectrometer_Index[0]) < num_Spectrometer_Samples):
         if int(Spectrometer_Index[0]) == (num_Spectrometer_Samples-num_BakGro_Spec):
@@ -288,7 +286,6 @@ def Continuous_Paradigm(Integration_Continuous, num_Spectrometer_Samples, num_DA
         if  Spectrometer_is_read.value == 1:
             Spectrometer_is_read.value = 0
             #Full_Spec_Records[:, Spectrometer_Index[0]] = Current_Spec_Record #Update columns with spectrum
-
     if (Power_meter.Error == 0):
         Pros_Power.terminate()
 
@@ -496,7 +493,7 @@ def Perform_Test():
         plt.figure()
         for i in range(num_Spectrometer_Samples):
             plt.plot(np.asarray(Spec1.readWavelength()[Min_Wave_Index:Max_Wave_Index]), Full_Spec_Records[:, i]) 
-        #Plot the wavelengths vs each column/spectrum -- should be all on the same plot but separate spectrums denoted by colour
+        Plot the wavelengths vs each column/spectrum -- should be all on the same plot but separate spectrums denoted by colour
         plt.title('Spectrometer recordings')
         plt.xlabel('Wavelength (nano meter)')
         plt.ylabel('Intensity')
