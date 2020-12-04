@@ -17,7 +17,7 @@ import glob
 import datetime
 import time
 import bisect
-from multiprocessing import Process, Value, Array
+from multiprocessing import Process, Value, Array, Pool
 from Tkinter import * #Tk, Text, BOTH, W, N, E, S, RAISED, Frame, Message, LEFT, TOP, BOTTOM, DISABLED, NORMAL, PhotoImage, StringVar, Toplevel
 from ttk import Button, Style, Label, Entry, Notebook, Scale
 from tkFileDialog import askopenfilename
@@ -39,8 +39,8 @@ Green_Laser = "FIO0"
 Green_Shutter = "DAC0"
 
 #Initialising values
-Open_Shutter = 5
-Close_Shutter = 0
+open_shutter = 5
+close_shutter = 0
 
 PhotoDiode_Port = "AIN1"
 #Spectrometer_Trigger_Port = "DAC1"
@@ -54,10 +54,8 @@ def DAQ_Read_Process(num_DAC_Samples):
     Reading the Photodiode
     '''
     for i in range(num_DAC_Samples):
-        a, b = DAQ1.readPort(PhotoDiode_Port)
-        DAQ_Signal[i] = b
-        DAQ_Time[i] = a
-    DAQ_Index.value = num_DAC_Samples
+        DAQ_Signal[i], DAQ_time[i] = DAQ1.readPort(PhotoDiode_Port)
+    DAQ_index.value = num_DAC_Samples
     DAQ_Is_Read.value = 1
 
 def DAQ_Speed_Test(num_DAQ_Tests):
@@ -93,7 +91,7 @@ def Power_Read_Process(num_power_samples):
     '''
     for i in range(num_power_samples):
         Power_Signal[i], Power_Time[i] = Power_meter.readPower()
-    Power_Index[0] = num_power_samples
+    Power_Index.value = num_power_samples
     Power_Is_Read.value = 1 #Has been read
 
 def Timer_Multi_Process(Time_In_Seconds):
@@ -102,6 +100,7 @@ def Timer_Multi_Process(Time_In_Seconds):
     Usage Ex: Px = Process(target=Timer_Multi_Process, args=(Timer_length,))
     Px.start() and in your code constantly check for "Timer_Is_Done"
     '''
+    Time_In_ms = Time_In_Seconds/1000
     if Timer_Is_Over.value is 1:
         print ('ERROR: The previous timer is still running. This timer can be only called once at a time.')
     time.sleep(Time_In_Seconds)
@@ -131,7 +130,7 @@ def Spectrometer_Speed_Test(num_Spec_Tests):
     while True:
         Start_Time = time.time()
         Spectrometer_Read_Process(num_Spec_Tests)
-        Spectrometer_Index[0] = 0
+        spec_index.value = 0
         '''
         while I < num_Spec_Tests:
             Scratch_Signal, Mean_Time = Spec1.readIntensity(True, True)
@@ -155,20 +154,20 @@ def Spectrometer_Speed_Test(num_Spec_Tests):
     print ('Spectrometer minimum integration time is %output_file ms and the practical minimum integration time is %output_file ms \n' %(Spec1.Handle.minimum_integration_time_micros/float(1000), Test_Integration_Time))
     return Test_Integration_Time
 
-def Spectrometer_Read_Process(num_Spectrometer_Samples):
+def Spectrometer_Read_Process(num_spec_samples):
     '''
     A function for reading the spectrometer intensities
     '''
-    for i in range(num_Spectrometer_Samples):
-        Spectrometer_Index[0] = i
+    for i in range(num_spec_samples):
+        spec_index.value = i
         Intensity, Time = Spec1.readIntensity(True, True) #Returns the intensity value and time at which it was taken
         Intensity_Array = np.asanyarray(Intensity)
         Intensity_Matrix = np.ndarray.reshape(Intensity_Array, (len(Intensity_Array), 1))
-        Full_Spec_Records[:, Spectrometer_Index[0]] = Intensity_Matrix[Min_Wave_Index:Max_Wave_Index]
-        Full_Spec_Records_Arr[Spectrometer_Index[0]*len(Wavelengths):(Spectrometer_Index[0]+1)*len(Wavelengths)] = Intensity_Matrix[Min_Wave_Index:Max_Wave_Index]
-        #Spec_Time[Spectrometer_Index[0]] = Time
+        #Full_Spec_Records[:, spec_index.value] = Intensity_Matrix[min_wave_index:max_wave_index]
+        Full_Spec_Records_Arr[spec_index.value*len(Wavelengths):(spec_index.value+1)*len(Wavelengths)] = Intensity_Matrix[min_wave_index:max_wave_index]
+        spec_time[spec_index.value] = Time
         Spectrometer_is_read.value = 1
-        #print ("spectrometer Index is %i" %Spectrometer_Index[0])
+        #print ("spectrometer Index is %i" %spec_index[0])
 
 def Check_Output_Folder():
     '''
@@ -179,7 +178,7 @@ def Check_Output_Folder():
     if not os.path.exists(Path_to_Records):
         os.makedirs(Path_to_Records)
 
-def Multi_Integration_Paradigm(Integration_list_MilSec, Integration_Buffer_Time, Shutter_Delay, num_power_samples):
+def Multi_Integration_Paradigm(integration_list_ms, Integration_Buffer_Time, Shutter_Delay, num_power_samples):
     '''
     Below paradigm is based on free running of the spectrometer.
     '''
@@ -187,71 +186,34 @@ def Multi_Integration_Paradigm(Integration_list_MilSec, Integration_Buffer_Time,
         Pros_Power = Process(target=Power_Read_Process, args=(num_power_samples,))
         Pros_Power.start()
 
-    Integration_Base = Integration_list_MilSec[-1] + 2*Integration_Buffer_Time
+    spec_index.value = 0
+    while spec_index.value < len(integration_list_ms):
+       
+        Timer_Is_Over.value = 0
+        Spectrometer_Init_Process(integration_list_ms[spec_index.value], 0)
+        #pros_init = Process(target=Spectrometer_Init_Process, args=(integration_list_ms[spec_index.value], 0))
+        #pros_init.start()
+        #pros_init.join()
 
-    Trigger_mode = 0    # Free running
-    Process_Order = 2   # Order of Process: 0 = setting the timer for the duration of the laser exposure
-               # 1 = turning off the laser (the exposure time is over) and waiting for the spectromer to finish the current integration cycle
-               # 2 = integration time is over and spectrometer must be read and setting the timer for the buffer time of the integration cycle
+        pros_timer = Process(target=Timer_Multi_Process, args=(integration_list_ms[spec_index.value], ))
+        DAQ1.writePort(chosen_shutter, open_shutter)
+        pros_timer.start()
+        pros_timer.join()
 
-    Spectrometer_Init_Done.value = 0 #Not Complete
-    #Pros_Spectrometer_Init = Process(target = Spectrometer_Init_Process, args=(Integration_list_MilSec[Spectrometer_Index[0]], Trigger_mode))
-    #Pros_Spectrometer_Init = Process(target = Spectrometer_Init_Process, args=(Integration_Base, Trigger_mode))
-    #Pros_Spectrometer_Init.start()
-    time.sleep(0.1)
+        pool = Pool(processes=2)
+        Pros_Spec = pool.apply_async(Spectrometer_Read_Process, (1, ))
+        Pros_DAQ = pool.apply_async(DAQ_Read_Process, (1, ))
+        pool.close()
+        pool.join()
 
-    Spectrometer_is_read.value = 0 #Has not been read
-    #Pros_Spec = Process(target=Spectrometer_Read_Process, args=(len(Integration_list_MilSec),))
-    #Pros_Spec.start() #Begins reading
+        DAQ1.writePort(chosen_shutter, close_shutter)
 
-    print ('Step1, First integration does not have laser exposure', time.time())
-    while (Spectrometer_Index[0] < len(Integration_list_MilSec)):
-        if  (Timer_Is_Over.value == 1) and (Process_Order == 0): #Sets up the timer for the next integration cycle
-            Timer_Is_Over.value = 0 #Resets timer
-            P_Timer = Process(target=Timer_Multi_Process, args=(Integration_list_MilSec[Spectrometer_Index[0]-1]/float(1000),))
-            P_Timer.start()
-            DAQ1.writePort(Chosen_Shutter, Open_Shutter)
-            Ref_Time[DAQ_Index[0]] = time.time()
-            print ('Step2, Raising edge has started',  time.time())
-            Process_Order = 1
-        elif(Timer_Is_Over.value == 1) and (Process_Order == 1): #Closes the shutter
-            DAQ1.writePort(Chosen_Shutter, Close_Shutter)
-            print ('Step3, Falling edge has started',  time.time())
-            Ref_Time[DAQ_Index[0]] = time.time()
-            Timer_Is_Over.value = 0
-            Process_Order = 2
-        elif(Spectrometer_is_read.value == 1) and (Process_Order == 2): #Once an integration cycle is complete
-            while Spectrometer_Index[0] < len(Integration_list_Milsec): #Repeats until all integration cycles are complete
-                print ('Step4, Spectrometer has been read',  time.time())
-                Spectrometer_is_read.value = 0
-                #Full_Spec_Records[:, Spectrometer_Index[0]] = Current_Spec_Record #Updates the matrix with readings
-                Spectrometer_Index[0] += 1
-
-            Timer_Is_Over.value = 0
-            P_Timer = Process(target=Timer_Multi_Process, args=(Integration_Buffer_Time/float(1000),))
-            P_Timer.start()
-            Pros_Spectrometer_Init = Process(target = Spectrometer_Init_Process, args=(Integration_Base, Trigger_mode))
-            Pros_Spectrometer_Init.start()
-            Process_Order = 0 #Reset Process
-        u = (DAQ1.readPort(PhotoDiode_Port))
-        DAQ_Signal[DAQ_Index[0]], DAQ_Time[DAQ_Index[0]] = DAQ1.readPort(PhotoDiode_Port)
-        Ref_Time[DAQ_Index[0]] = time.time()
-    Pros_Spec.terminate()
-
-    Timer_Is_Over.value = 0
-    P_Timer = Process(target=Timer_Multi_Process, args=(Integration_Buffer_Time/float(1000),))
-    P_Timer.start()
-    print ('time of Timer start %s output_file:' %time.time())
-    while  Timer_Is_Over.value == 0: #Not over
-        DAQ_Signal[DAQ_Index[0]], DAQ_Time[DAQ_Index[0]] = DAQ1.readPort(PhotoDiode_Port)
-        #print (DAQ_Signal[DAQ_Index[0]])
-        DAQ_Index[0] = DAQ_Index[0] + 1
-        Ref_Time[DAQ_Index[0]] = time.time()
-    P_Timer.terminate()
+        spec_index.value += 1
+        
     if (Power_meter.Error == 0):
         Pros_Power.terminate()
 
-def Continuous_Paradigm(Integration_Continuous, num_Spectrometer_Samples, num_DAC_Samples, num_power_samples, num_BakGro_Spec):
+def Continuous_Paradigm(continuous_integration_time, num_spec_samples, num_DAC_Samples, num_power_samples, num_BakGro_Spec):
     '''
     A function used to read data for the Continuous Paradigm
     '''
@@ -262,23 +224,20 @@ def Continuous_Paradigm(Integration_Continuous, num_Spectrometer_Samples, num_DA
 
     #Initialises Spectrometer with Integration time and Trigger mode
     Spectrometer_Init_Done.value = 0 #Not Completeime
-    Pros_Spectrometer_Init = Process(target = Spectrometer_Init_Process, args=(Integration_Continuous, 0))
+    Pros_Spectrometer_Init = Process(target = Spectrometer_Init_Process, args=(continuous_integration_time, 0))
     Pros_Spectrometer_Init.start()
     Pros_Spectrometer_Init.join()
 
-    Pros_Spec = Process(target=Spectrometer_Read_Process, args=(num_Spectrometer_Samples, ))
-    Pros_DAQ = Process(target=DAQ_Read_Process, args=(num_DAC_Samples, ))
-    Pros_Shutter = Process(target=DAQ1.writePort, args=(Chosen_Shutter, Open_Shutter))
-
-    global process_start_time
-    process_start_time = time.time()
-    Pros_Spec.start()
-    Pros_DAQ.start()
-    Pros_Shutter.start()
-    Pros_Spec.join()
-    Pros_DAQ.join()
-    Pros_Shutter.join()
-    DAQ1.writePort(Chosen_Shutter, Close_Shutter)
+    start_time = time.time()
+    DAQ1.writePort(chosen_shutter, open_shutter)
+    pool = Pool(processes=2)
+    Pros_Spec = pool.apply_async(Spectrometer_Read_Process, (num_spec_samples, ))
+    Pros_DAQ = pool.apply_async(DAQ_Read_Process, (num_DAC_Samples, ))
+    pool.close()
+    pool.join()
+    DAQ1.writePort(chosen_shutter, close_shutter)
+    duration = time.time() - start_time
+    print("Duration of the measurement: {} second(s)".format(duration))
 
 def Begin_Test():
     '''
@@ -337,47 +296,48 @@ def Perform_Test():
     '''
     #Initialises values as integers equal to 0
     global Spectrometer_is_read, Spectrometer_Init_Done, DAQ_Is_Read, Power_Is_Read, Timer_Is_Over
-    Spectrometer_is_read = Spectrometer_Init_Done = DAQ_Is_Read = Power_Is_Read = Timer_Is_Over = Value('i', 0)
+    Spectrometer_is_read = Value('i', 0)
+    Spectrometer_Init_Done = Value('i', 0)
+    DAQ_Is_Read = Value('i', 0)
+    Power_Is_Read = Value('i', 0)
+    Timer_Is_Over = Value('i', 0)
 
     Integration_Time = 100                                        # Integration time in ms
     Spec1.setTriggerMode(3)                                       # It is set for free running mode
-    #Spec1.setIntegrationTime(Integration_Time*1000)              # Integration time is in microseconds when using the library
 
     # Check to see if the output folder named Records exists, creates this folder if it does not already exist
     Check_Output_Folder()
 
     #Ensures shutters are closed before starting
-    DAQ1.writePort(Green_Shutter, Close_Shutter)
-    DAQ1.writePort(Blue_Shutter, Close_Shutter)
+    DAQ1.writePort(Green_Shutter, close_shutter)
+    DAQ1.writePort(Blue_Shutter, close_shutter)
 
     # Initialising the variables
-    Integration_list_MilSec = [8, 16, 32, 64, 128, 256, 512, 1024] #Integration time for the spectrometer in ms
+    integration_list_ms = [8, 16, 32, 64, 128, 256, 512, 1024] #Integration time for the spectrometer in ms
     Shutter_Delay = 4  #ms
 
     num_DAQ_Tests = 20000
     DAQ_SamplingRate = DAQ_Speed_Test(num_DAQ_Tests)*1000  #Shows the sampling speed in ms
 
     #Takes data from devices to determine the range of appropriate wavelengths
-    global Wavelengths, Min_Wave_Index, Max_Wave_Index, Spec_Time, Spectrometer_Index, Current_Spec_Record
+    global Wavelengths, min_wave_index, max_wave_index, spec_time, spec_index, Current_Spec_Record
     Wavelengths = Spec1.Handle.wavelengths()
-    Min_Wave_Index = max(bisect.bisect(Wavelengths, float(min_length.get())-1), 0)
-    Max_Wave_Index = bisect.bisect(Wavelengths, float(max_length.get()))
-    Wavelengths = Wavelengths[Min_Wave_Index:Max_Wave_Index]
+    min_wave_index = max(bisect.bisect(Wavelengths, float(min_length.get())-1), 0)
+    max_wave_index = bisect.bisect(Wavelengths, float(max_length.get()))
+    Wavelengths = Wavelengths[min_wave_index:max_wave_index]
     Current_Spec_Record = np.zeros(shape=len(Wavelengths), dtype=float)
     num_Spec_Tests = 500
-    Spec_Time = np.array(np.zeros(shape=(num_Spec_Tests, 1), dtype = float ))
-    Spectrometer_Index = np.array(np.zeros(shape=(1, 1), dtype = int))
-    
+
     #Commented out for speed Spec_SamplingRate = Spectrometer_Speed_Test(num_Spec_Tests)
     Integration_Buffer_Time = 100       #ms               # This is for the spectrometer. This is the time from the integration started till shutter opens
-    #DurationOfReading = np.sum(Integration_list_MilSec)  + len(Integration_list_MilSec)*Delay_Between_Integrations   # Duration of reading in seconds.
-    DurationOfReading = (Integration_list_MilSec[-1] + Integration_Buffer_Time + Shutter_Delay*3)*len(Integration_list_MilSec)     # Duration of reading in seconds.
+    #DurationOfReading = np.sum(integration_list_ms)  + len(integration_list_ms)*Delay_Between_Integrations   # Duration of reading in seconds.
+    DurationOfReading = (integration_list_ms[-1] + Integration_Buffer_Time + Shutter_Delay*3)*len(integration_list_ms)     # Duration of reading in seconds.
     num_BakGro_Spec = 10       # This is for continuous reading and refers to the last few spectrom reading wich are background and the laser is off
 
     # Reads and stores parameter values the user inputs into the GUI
-    global Chosen_Shutter
-    Chosen_Shutter = shutter_mode.get() #Green Shutter or Blue Shutter
-    Integration_Continuous = float(integration_time.get()) #Integration time in ms
+    global chosen_shutter
+    chosen_shutter = shutter_mode.get() #Green Shutter or Blue Shutter
+    continuous_integration_time = float(integration_time.get()) #Integration time in ms
     DurationOfReading = float(record_time.get())*1000.0 + num_BakGro_Spec*float(integration_time.get()) #Recording duration in s
     Filename_Prefix = filename.get() #Filename, default is OptrodeData
     if Filename_Prefix == "":
@@ -388,41 +348,48 @@ def Perform_Test():
         num_Power_Tests = 200
         Power_SamplingRate = Power_Speed_Test(num_Power_Tests)*1000            #Shows the sampling speed in ms
 
-    #Defining the size of the arrays and matrices for recording the signals beased on the duration of the recording #
-    #num_DAC_Samples = int(round((DurationOfReading + DurationOfReading/4) /DAQ_SamplingRate))        # Number of samples for DAQ analogue to digital converter (AINx).
+    #Defining the size of the arrays and matrices for recording the signals based on the duration of the recording
+    #Number of samples for DAQ analogue to digital converter (AINx) - Divided by 100 because there would otherwise be a lot
     num_DAC_Samples = int(round(DurationOfReading/DAQ_SamplingRate))
 
+    # Number of samples for P100D Power meter to read.
+    # Roughly P100 can read the power every 2.7 ms.
     if (Power_meter.Error == 0):
         num_power_samples = int(round(DurationOfReading/Power_SamplingRate))
     else:
         num_power_samples = 0
-    #No_Power_Sample = int(round(DurationOfReading/Powermeter_SamplingRate))
-    # Number of samples for P100D Power meter to read.
-    # Roughly P100 can read the power every 2.7 ms.
+
 
     if (paradigm_mode.get() == 'c'): #Continuous paradigm
-        num_Spectrometer_Samples =  int(round(float(DurationOfReading)/float(float(Integration_Continuous))))  # Number of samples for spectrometer to read.
+        num_spec_samples =  int(round(float(DurationOfReading)/float(continuous_integration_time)))  # Number of samples for spectrometer to read.
     else: #Multi Integration
-        num_Spectrometer_Samples =  len(Integration_list_MilSec) # Number of samples for spectrometer to read.
+        num_spec_samples =  len(integration_list_ms) # Number of samples for spectrometer to read.
 
     rerun = "First"
     while True:
         #Initialising Variables
-        global Full_Spec_Records, Full_Spec_Records_Arr
-        Full_Spec_Records_Arr = Array("d", np.zeros(len(Wavelengths) * num_Spectrometer_Samples)) 
-        Full_Spec_Records = np.array(np.zeros(shape=(len(Wavelengths), num_Spectrometer_Samples), dtype = float)) #Values in 2D Array
+        global Full_Spec_Records, Full_Spec_Records_Arr, spec_time, spec_index
+        Full_Spec_Records_Arr = Array("d", np.zeros(len(Wavelengths) * num_spec_samples)) 
+        Full_Spec_Records = np.array(np.zeros(shape=(len(Wavelengths), num_spec_samples), dtype = float)) #Values in 2D Array
         #Each column is a spectrum with each row being the intensity value for each wavelength
-        Current_Spec_Record = np.zeros(shape=(len(Wavelengths), 1), dtype = float)
-        global DAQ_Signal, DAQ_Time, DAQ_Index, Ref_Signal, Ref_Time
-        DAQ_Signal = DAQ_Time = Array("d", np.zeros(shape=(num_DAC_Samples, 1)))
-        DAQ_Index = Value("i", 0)
-        Ref_Signal = Ref_Time = np.array(np.zeros(shape=(num_DAC_Samples, 1), dtype = float))
+
+        #Initialise variables for storing the data
+        #Signal refers to the value that is read from a device, Time is the time the reading was taken at, and Index is used as a counter
+        spec_time = Array("d", np.zeros(num_spec_samples))
+        spec_index = Value("i", 0)
+    
+        global DAQ_Signal, DAQ_time, DAQ_index, Ref_Signal, Ref_Time
+        DAQ_Signal = Array("d", np.zeros(num_DAC_Samples))
+        DAQ_time = Array("d", np.zeros(num_DAC_Samples))
+        DAQ_index = Value("i", 0)
+        Ref_Signal = Array("d", np.zeros(num_DAC_Samples))
+        Ref_Time = Array("d", np.zeros(num_DAC_Samples))
 
         if Power_meter.Error == 0:
             global Power_Signal, Power_Time, Power_Index
-            Power_Signal = np.array(np.zeros(shape=(num_power_samples, 1), dtype=float)) #Keeps track of values read from Power Meter
-            Power_Time = np.array(np.zeros(shape=(num_power_samples, 1), dtype=float)) #Time at which values were taken
-            Power_Index = np.array(np.zeros(shape=(1, 1), dtype=int)) #Counter
+            Power_Signal = Array("d", np.zeros(num_power_samples)) #Keeps track of values read from Power Meter
+            Power_Time = Array("d", np.zeros(num_power_samples)) #Time at which values were taken
+            Power_Index = Value("i", 0) #Counter
 
         # Wait for user to press Start
         but2.config(state=NORMAL)
@@ -432,17 +399,14 @@ def Perform_Test():
 
         # Starting the chosen paradigm -- The main process
         if (paradigm_mode.get() == 'm'):
-            Multi_Integration_Paradigm(Integration_list_MilSec, Integration_Buffer_Time, Shutter_Delay, num_power_samples)
+            Multi_Integration_Paradigm(integration_list_ms, Integration_Buffer_Time, Shutter_Delay, num_power_samples)
         else:
-            Continuous_Paradigm(float(Integration_Continuous), num_Spectrometer_Samples, num_DAC_Samples, num_power_samples, num_BakGro_Spec)
+            Continuous_Paradigm(float(continuous_integration_time), num_spec_samples, num_DAC_Samples, num_power_samples, num_BakGro_Spec)
 
-        time.sleep(10)
-        #Loading the Spectrometer Array to a matrix before saving and plotting
-        num_wavelengths = len(Wavelengths)
         # Closing the devices
         Spec_Details = Spec1.readDetails()
         DAQ_Details = DAQ1.getDetails()
-        DAQ1.writePort(Chosen_Shutter, Close_Shutter)
+        DAQ1.writePort(chosen_shutter, close_shutter)
 
         #The file containing the records (HDF5 format)
         os.chdir(Path_to_Records)
@@ -455,71 +419,71 @@ def Perform_Test():
         #Opens a file to output data
         output_file = h5py.File(File_name, "w")
 
+        #Fix time arrays
+        DAQ_time_output = np.asarray(DAQ_time)
+        DAQ_time_output -= DAQ_time_output[0]
+        spec_time_output = np.asarray(spec_time)
+        spec_time_output -= spec_time_output[0]
         # Saving the recorded signals in HDF5 format
         Optrode_DAQ = output_file.create_group('DAQT7')
         output_file.create_dataset('DAQT7/PhotoDiode', data = np.asanyarray(DAQ_Signal))
-        output_file.create_dataset('DAQT7/TimeIndex', data = np.asanyarray(DAQ_Time))
+        output_file.create_dataset('DAQT7/TimeIndex', data = np.asanyarray(DAQ_time_output))
         Optrode_DAQ.attrs['DAQT7 Details'] = np.string_(DAQ_Details)
 
-        Spec_Records_1D = np.ndarray.reshape(Full_Spec_Records, len(Wavelengths)*num_Spectrometer_Samples)
         Optrode_Spectrometer = output_file.create_group('Spectrometer')
-        output_file.create_dataset('Spectrometer/Intensities', data = np.asanyarray(Spec_Records_1D))
-        output_file.create_dataset('Spectrometer/Time_Index', data = np.asanyarray(Spec_Time))
+        output_file.create_dataset('Spectrometer/Intensities', data = np.asanyarray(Full_Spec_Records_Arr))
+        output_file.create_dataset('Spectrometer/Time_Index', data = np.asanyarray(spec_time_output))
         output_file.create_dataset('Spectrometer/WaveLength', data = np.asanyarray(Wavelengths))
         Optrode_Spectrometer.attrs['Spectrometer Details'] = np.string_(Spec_Details)
 
         if (Power_meter.Error == 0):
+            power_time_output = np.asarray(Power_Time)
+            power_time_output -= power_time_output[0]
             Optrode_Power = output_file.create_group('PM100_PowerMeter')
             output_file.create_dataset('PM100_PowerMeter/Power', data = np.asanyarray(Power_Signal))
-            output_file.create_dataset('PM100_PowerMeter/TimeIndex', data = np.asanyarray(Power_Time))
+            output_file.create_dataset('PM100_PowerMeter/TimeIndex', data = np.asanyarray(power_time_output))
             Optrode_DAQ.attrs['PowerMeter Details'] = np.string_(DAQ_Details)
         output_file.close()
 
-        # Plotting the spectrometer and the photodiode recordings
+        #Plotting the spectrometer and the photodiode recordings
+        #For all of the time plots, we subtract the first value which is the starting time
+
         if plots[0].get() == 1:
             plt.figure()
-            plt.show()
-            for i in range(DAQ_Index.value):
-                plt.plot(np.asarray(DAQ_Time[i])-process_start_time, np.asanyarray(DAQ_Signal[i]))
+            plt.plot(np.asanyarray(DAQ_time[0:DAQ_index.value]) - DAQ_time[0], DAQ_Signal)
             plt.title('Photo diode')
             plt.xlabel('Elapsed time (s)')
             plt.ylabel('Voltage (v)')
             plt.show()
 
         plt.figure()
-
-        for i in range(num_Spectrometer_Samples):
-            Full_Spec_Records[:, i] = Full_Spec_Records_Arr[i*len(Wavelengths):(i+1)*len(Wavelengths)]
-        for i in range(num_Spectrometer_Samples):
-            plt.plot(np.asarray(Spec1.readWavelength()[Min_Wave_Index:Max_Wave_Index]), Full_Spec_Records[:, i]) 
+        #for i in range(num_spec_samples):
+            #Full_Spec_Records[:, i] = Full_Spec_Records_Arr[i*len(Wavelengths):(i+1)*len(Wavelengths)]
+        #for i in range(num_spec_samples):
+            #plt.plot(np.asarray(Spec1.readWavelength()[min_wave_index:max_wave_index]), Full_Spec_Records_Arr[i*len(Wavelengths):(i+1)*len(Wavelengths)]) 
+        plt.plot(np.asarray(Spec1.readWavelength()[min_wave_index:max_wave_index]), Full_Spec_Records_Arr[0*len(Wavelengths):(0+1)*len(Wavelengths)])
         #Plot the wavelengths vs each column/spectrum -- should be all on the same plot but separate spectrums denoted by colour
         plt.title('Spectrometer recordings')
         plt.xlabel('Wavelength (nano meter)')
         plt.ylabel('Intensity')
         plt.show()
-        #plt.plot(np.asarray(Ref_Time[0:DAQ_Index[0]]) - DAQ_Time[0], Ref_Signal[0:DAQ_Index[0]])
+        #plt.plot(np.asarray(Ref_Time[0:DAQ_index[0]]) - DAQ_time[0], Ref_Signal[0:DAQ_index[0]]) #Used for multiintegration
 
         # Estimate the latencies of the devices
         if plots[1].get() == 1:
             plt.figure()
-            plt.subplot(1,2,1)
-            DAQ_Latency = np.asanyarray(DAQ_Time[0:DAQ_Index[0]])
-            DAQ_Latency[0] = 0
-            for i in range(1, DAQ_Index[0]):
-                DAQ_Latency[i] = DAQ_Time[i] - DAQ_Time[i-1]
-            plt.subplot(1,3,1)
-            plt.plot(DAQ_Latency)
+            DAQ_latency = DAQ_time_output
+            for i in range(1, DAQ_index.value):
+                DAQ_latency[i] = (DAQ_time[i]-DAQ_time[i-1]) #Plot the time difference between each DAQ reading
+            plt.plot(DAQ_latency[1:])
             plt.ylabel("Time (s)")
             plt.title("DAQ latencies")
             plt.show()
 
-            plt.subplot(1,2,2)
-            Spec_Latency = np.asarray(Spec_Time[0:np.int(Spectrometer_Index[0])])
-            Spec_Latency[0] = 0
-            for i in range(1,Spectrometer_Index[0]):
-                Spec_Latency[i] = np.float(Spec_Time[i] - Spec_Time[i-1])
-            plt.plot(Spec_Latency[1:])
-
+            spec_latency = spec_time_output
+            for i in range(1, spec_index.value):
+                spec_latency[i] = (spec_time[i]-spec_time[i-1]) #Plots the time difference between each spectrometer reading
+            plt.plot(spec_latency[1:])
             plt.ylabel("Time (s)")
             plt.title("Spectrometer integration durations")
             plt.show()
@@ -527,21 +491,18 @@ def Perform_Test():
         #PLots the readings for the powermeter
         if plots[2].get() == 1 and Power_meter.Error == 0:
             plt.figure()
-            plt.subplot(1,2,1)
-            Power_Latency = np.asanyarray(Power_Time[0:Power_Index[0]])
-            Power_Latency[0] = 0
-            for I in range(1,int(Power_Index[0])):
-                Power_Latency[I] = Power_Time[I] - Power_Time[I-1]
-            plt.subplot(1,3,1)
-            plt.plot(Power_Latency)
+            Power_Latency = np.asanyarray(Power_Time[0:Power_Index.value])
+            for i in range(1, Power_Index.value):
+                Power_Latency[i] = (Power_Time[i]-Power_Time[i-1])
+            plt.plot(Power_Latency[1:])
             plt.ylabel("Time (s)")
             plt.title("Power latencies")
             plt.show()
-            plt.subplot(1,2,2)
-            plt.plot(np.asanyarray(Power_Time[0:Power_Index[0]]) - Power_Time[0], np.asanyarray(Power_Signal[0:Power_Index[0]]))
+            #plt.subplot(1,2,2)
+            plt.plot(np.asanyarray(Power_Time[0:Power_Index])-Power_Time[0], Power_Signal)
             plt.title('Power Meter')
             plt.xlabel('Elapsed time (s)')
-            plt.ylabel('Power (w)')
+            plt.ylabel('Power (W)')
             plt.show()
 
         print('\n')
@@ -560,6 +521,9 @@ def Perform_Test():
             but1.config(state=NORMAL)
             Disable_UI(root, False)
             break
+
+def on_closing():
+    root.destroy()
 
 def Close_GUI():
     '''
@@ -716,7 +680,7 @@ if __name__ == "__main__":
         box.grid(row=i, column=0, padx=4, pady=4, sticky=W)
         i = i+1
 
-    # Plot select frame
+    #Plot select frame
     frame7 = Frame(framech)
     frame7.grid(row=1, column=3, padx=4, pady=4)
     frame7.grid_columnconfigure(1, weight=1)
@@ -749,4 +713,5 @@ if __name__ == "__main__":
     but5 = Button(frame6, text="Close", command=Close_GUI)
     but5.grid(row=1, column=3, padx=10, pady=10)
 
+root.protocol("WM_DELETE_WINDOW", on_closing)
 root.mainloop()
