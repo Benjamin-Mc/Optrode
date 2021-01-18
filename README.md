@@ -10,6 +10,13 @@ Potential Complications:
 - Errors when reading the DAQ card -- To resolve, simple exit the program and re-run it
 
 
+Output:
+This program gives three plots of output, these are:
+1. 
+2. 
+3. 
+
+
 In the main program, there are multiple other programs, as well as libraries that have been imported for use. These are:
 
 Programs:
