@@ -1,20 +1,8 @@
-To perform a test, execute the "OptrodeVersion5.py" file.
+To perform a test, execute the "Optrode_Version7.py" file.
 To do this in the linux OS:
 - Open a terminal
-- Change to the directory that contains the program -- "cd Documents/Olivier/LFF"
-- Execute the program -- "python OptrodeVersion5.py"
-
-
-Potential Complications:
-- At times the program needs permission to access the devices -- To resolve this, enter the sudo password
-- Errors when reading the DAQ card -- To resolve, simple exit the program and re-run it
-
-
-Output:
-This program gives three plots of output, these are:
-1. 
-2. 
-3. 
+- Change to the directory that contains the program -- "cd PhysicsLabPythonCodes/Optrode/"
+- Execute the program -- "python Optrode_Version7.py"
 
 
 In the main program, there are multiple other programs, as well as libraries that have been imported for use. These are:
