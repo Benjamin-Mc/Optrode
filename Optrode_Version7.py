@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jul 12 11:00:10 2016
-This code runs the Optrode version 2
-@author: Yaqub Jonmohamadi
+Created on Fri 29th Jan 11:01:10 2021
+This code runs the Optrode version 7
+@author: Yaqub Jonmohamadi, Benjamin McIntosh
 """
 #%%
 import socket
