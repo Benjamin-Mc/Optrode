@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri 29th Jan 11:01:10 2021
+Created on Fri Jan 29th 12:24:00 2021
 This code runs the Optrode version 7
 @author: Yaqub Jonmohamadi, Benjamin McIntosh
 """
@@ -58,7 +58,6 @@ def DAQ_Read_Process(num_DAC_samples):
     '''
     for i in range(DAQ_index.value, DAQ_index.value + num_DAC_samples):
         DAQ_signal[i], DAQ_time[i] = DAQ1.readPort(PhotoDiode_Port)
-
     DAQ_index.value = DAQ_index.value + num_DAC_samples
 
 def DAQ_Speed_Test(num_DAQ_Tests):
@@ -94,7 +93,7 @@ def Power_Read_Process(num_power_samples):
     '''
     for i in range(power_index.value, power_index.value + num_power_samples):
         power_signal[i], power_time[i] = Power_meter.readPower()
-        power_index.value = power_index.value + 1
+    power_index.value = power_index.value + num_power_samples
 
 def Process_Timer(time_in_seconds):
     '''
@@ -169,7 +168,7 @@ def Spectrometer_Read_Process(num_spec_samples, measurement):
         else:
             test_arr[i*len(Wavelengths):(i+1)*len(Wavelengths)] = Intensity_Matrix[min_wave_index:max_wave_index]
     #print ("spectrometer Index is %i" %spec_index.value)
-    spec_index.value += num_spec_samples
+    spec_index.value = spec_index.value + num_spec_samples
 
 def Check_Output_Folder():
     '''
@@ -183,23 +182,26 @@ def Check_Output_Folder():
 def Multi_Integration_Paradigm(integration_list_ms, Integration_Buffer_time, Shutter_Delay, num_power_samples, num_DAC_samples):
     '''
     Below paradigm is based on free running of the spectrometer.
-
     '''
+    #Powermeter starts reading
     if (Power_meter.Error == 0):
         Pros_Power = Process(target=Power_Read_Process, args=(num_power_samples, ))
         Pros_Power.start()
 
+    #One loop for each integration duration
     for i in range(len(integration_list_ms)):
         Spectrometer_Init_Process(integration_list_ms[spec_index.value], 0)
         time.sleep(0.1)
 
+    #Buffer in between readings
         timer_is_over.value = 0
         Pros_Timer = Process(target=Process_Timer, args=(Integration_Buffer_time, ))
         Pros_Timer.start()
         while timer_is_over.value == 0:
             DAQ_signal[DAQ_index.value], DAQ_time[DAQ_index.value] = DAQ1.readPort(PhotoDiode_Port)
             DAQ_index.value += 1
-
+    
+        #Open the shutter
         DAQ1.writePort(chosen_shutter, open_shutter)
         start = timeit.default_timer()
         timer_is_over.value = 0
@@ -209,11 +211,13 @@ def Multi_Integration_Paradigm(integration_list_ms, Integration_Buffer_time, Shu
             DAQ_signal[DAQ_index.value], DAQ_time[DAQ_index.value] = DAQ1.readPort(PhotoDiode_Port)
             DAQ_index.value += 1
         end = timeit.default_timer()
+        #Read spectrometer then close shutter
         Spectrometer_Read_Process(1, True)
         DAQ1.writePort(chosen_shutter, close_shutter)
         print("Duration: {}".format(end-start))
         time.sleep(0.1)
 
+    #Continues recording for short period after all spectrometer readings
     timer_is_over.value = 0
     Pros_Timer = Process(target=Process_Timer, args=(Integration_Buffer_time, ))
     Pros_Timer.start()
@@ -234,20 +238,24 @@ def Continuous_Paradigm(continuous_integration_time, num_spec_samples, num_DAC_s
     Pros_Spectrometer_Init.start()
     Pros_Spectrometer_Init.join()
 
+    #Starts reading Powermeter
     if (Power_meter.Error == 0):
         Pros_Power = Process(target=Power_Read_Process, args=(num_power_samples, ))
         Pros_Power.start()
 
+    #Starts reading Photodiode
     start_time = timeit.default_timer()
     DAQ_Read_Process(500)
     DAQ1.writePort(chosen_shutter, open_shutter)
     
+    #Shutter opens and starts integration
     pool = Pool(processes=2)
     Pros_Spec = pool.apply_async(Spectrometer_Read_Process, (num_spec_samples, True))
     Pros_DAQ = pool.apply_async(DAQ_Read_Process, (num_DAC_samples-1000, ))
     pool.close()
     pool.join()
 
+    #Close shutter and continue reading for short period of time
     DAQ1.writePort(chosen_shutter, close_shutter)
     DAQ_index.value = num_DAC_samples-500
     DAQ_Read_Process(500)
@@ -334,7 +342,7 @@ def Perform_Test():
     Shutter_Delay = 4  #ms
 
     num_DAQ_Tests = 20000
-    DAQ_SamplingRate = DAQ_Speed_Test(num_DAQ_Tests)*1000  #Shows the sampling speed in ms
+    DAQ_SamplingRate = DAQ_Speed_Test(num_DAQ_Tests)  #Shows the sampling speed in ms
 
     #Takes data from devices to determine the range of appropriate wavelengths
     global Wavelengths, min_wave_index, max_wave_index, spec_time, spec_index, Current_Spec_Record, test_arr
@@ -360,7 +368,7 @@ def Perform_Test():
     if (paradigm_mode.get() == 'c'):
         durationOfReading = float(record_time.get())*1000.0
     else:
-        durationOfReading = 2*(Integration_Buffer_time * (int(multi_integration_times.get()))) + (float(sum(integration_list_ms))/float(1000))
+        durationOfReading = float(sum(integration_list_ms))/float(1000.0) + (4 * len(integration_list_ms) * 0.1) + (len(integration_list_ms) * float(Integration_Buffer_time)/1000.0)
         #print(durationOfReading)
     filename_middle = filename.get() #Filename, default is Optrode Data
     if filename_middle == "":
@@ -372,13 +380,12 @@ def Perform_Test():
         num_DAC_samples = int(round(float(durationOfReading)/float(DAQ_SamplingRate)))+1000
     else: #Multi Integration
         num_spec_samples =  len(integration_list_ms) 
-        num_DAC_samples = int((durationOfReading) / float(DAQ_SamplingRate))
-
+        num_DAC_samples = int(float(durationOfReading)/float(DAQ_SamplingRate))
     if (Power_meter.Error == 0):
         num_power_tests = 200
-        power_sampling_rate = Power_Speed_Test(num_power_tests)*1000
+        power_sampling_rate = Power_Speed_Test(num_power_tests)
         if (paradigm_mode.get() == 'c'): #Continuous paradigm
-            num_power_samples = int(round(1.2 * durationOfReading/power_sampling_rate))
+            num_power_samples = int(round(1.2 * durationOfReading/power_sampling_rate))+1000
         else:
             num_power_samples = int(round(1.2 * durationOfReading/power_sampling_rate))
     else:
@@ -461,8 +468,8 @@ def Perform_Test():
 
         Optrode_Spectrometer = output_file.create_group('Spectrometer')
         output_file.create_dataset('Spectrometer/Intensities', data = np.asanyarray(spec_matrix))
-        output_file.create_dataset('Spectrometer/time_Index', data = np.asanyarray(spec_time_output))
-        output_file.create_dataset('Spectrometer/WaveLength', data = np.asanyarray(Wavelengths))
+        output_file.create_dataset('Spectrometer/TimeIndex', data = np.asanyarray(spec_time_output))
+        output_file.create_dataset('Spectrometer/Wavelength', data = np.asanyarray(Wavelengths))
         Optrode_Spectrometer.attrs['Spectrometer Details'] = np.string_(Spec_Details)
 
         if (Power_meter.Error == 0):
