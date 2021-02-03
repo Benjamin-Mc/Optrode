@@ -23,7 +23,6 @@ from Tkinter import * #Tk, Text, BOTH, W, N, E, S, RAISED, Frame, Message, LEFT,
 from tkFileDialog import askopenfilename
 from PIL import Image, ImageTk
 
-from backports.time_perf_counter import perf_counter
 import timeit
 from timeit import default_timer
 
@@ -93,7 +92,7 @@ def Power_Read_Process(num_power_samples):
     '''
     for i in range(power_index.value, power_index.value + num_power_samples):
         power_signal[i], power_time[i] = Power_meter.readPower()
-    power_index.value = power_index.value + num_power_samples
+        power_index.value = power_index.value + 1
 
 def Process_Timer(time_in_seconds):
     '''
@@ -247,7 +246,7 @@ def Continuous_Paradigm(continuous_integration_time, num_spec_samples, num_DAC_s
     start_time = timeit.default_timer()
     DAQ_Read_Process(500)
     DAQ1.writePort(chosen_shutter, open_shutter)
-    
+
     #Shutter opens and starts integration
     pool = Pool(processes=2)
     Pros_Spec = pool.apply_async(Spectrometer_Read_Process, (num_spec_samples, True))
@@ -366,7 +365,8 @@ def Perform_Test():
     continuous_integration_time = float(integration_time.get()) #Integration time in ms
     #durationOfReading = float(record_time.get())*1000.0 + num_BakGro_Spec*float(integration_time.get()) #Recording duration in s
     if (paradigm_mode.get() == 'c'):
-        durationOfReading = float(record_time.get())*1000.0
+        durationOfReading = float(record_time.get())        
+        #durationOfReading = float(record_time.get())*1000.0
     else:
         durationOfReading = float(sum(integration_list_ms))/float(1000.0) + (4 * len(integration_list_ms) * 0.1) + (len(integration_list_ms) * float(Integration_Buffer_time)/1000.0)
         #print(durationOfReading)
@@ -376,18 +376,15 @@ def Perform_Test():
 
     #Sets number of samples to take for each type of measurement
     if (paradigm_mode.get() == 'c'): #Continuous paradigm
-        num_spec_samples =  int(round(float(durationOfReading)/float(continuous_integration_time)))  
+        num_spec_samples =  int(round(float(durationOfReading)/float(continuous_integration_time)))*1000
         num_DAC_samples = int(round(float(durationOfReading)/float(DAQ_SamplingRate)))+1000
     else: #Multi Integration
         num_spec_samples =  len(integration_list_ms) 
-        num_DAC_samples = int(float(durationOfReading)/float(DAQ_SamplingRate))
+        num_DAC_samples = int(float(durationOfReading)/float(DAQ_SamplingRate))+1000
     if (Power_meter.Error == 0):
         num_power_tests = 200
         power_sampling_rate = Power_Speed_Test(num_power_tests)
-        if (paradigm_mode.get() == 'c'): #Continuous paradigm
-            num_power_samples = int(round(1.2 * durationOfReading/power_sampling_rate))+1000
-        else:
-            num_power_samples = int(round(1.2 * durationOfReading/power_sampling_rate))
+        num_power_samples = int(round(1.2 * durationOfReading/power_sampling_rate))+1000
     else:
         num_power_samples = 0
 
@@ -459,7 +456,8 @@ def Perform_Test():
         spec_time_output -= spec_time_output[0]
 
         spec_array = np.asarray(Full_Spec_Records_Arr)
-        spec_matrix = np.reshape(spec_array, (len(Wavelengths), len(Full_Spec_Records_Arr)/len(Wavelengths)))
+        spec_matrix = np.reshape(spec_array, (-1, len(Wavelengths)))
+        spec_matrix = np.transpose(spec_matrix)
         # Saving the recorded signals in HDF5 format
         Optrode_DAQ = output_file.create_group('DAQT7')
         output_file.create_dataset('DAQT7/PhotoDiode', data = np.asanyarray(DAQ_signal[:DAQ_index.value]))
@@ -571,6 +569,7 @@ def Close_GUI():
     DAQ1.close()
     Spec1.close()
     root.destroy()
+    exit()
 
 def Disable_UI(parent, disable=True):
     '''
@@ -758,7 +757,7 @@ if __name__ == "__main__":
     but3.grid(row=1, column=1, padx=10, pady=10)
     but4 = Button(frame6, text="Change", command=lambda: wait_var.set(2), state=DISABLED)
     but4.grid(row=1, column=2, padx=10, pady=10)
-    but5 = Button(frame6, text="Close", command=Close_GUI)
+    but5 = Button(frame6, text="Close", command=lambda: Close_GUI())
     but5.grid(row=1, column=3, padx=10, pady=10)
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
