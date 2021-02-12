@@ -31,7 +31,6 @@ from Tkinter import * #Tk, Text, BOTH, W, N, E, S, RAISED, Frame, Message, LEFT,
 from tkFileDialog import askopenfilename
 from PIL import Image, ImageTk
 
-from backports.time_perf_counter import perf_counter
 import timeit
 from timeit import default_timer
 
