@@ -214,7 +214,7 @@ def mainplots(intensities, wavelengths, export_pdf, page_heading, background, ti
     export_pdf.savefig(dpi=1200)
     plt.close()
 
-  #Writes some output statistics for the plots
+    #Writes some output statistics for the plots
     col_titles = ["Sample", "Peak Value\n (Sum)", "Peak Value\n (Average)", "Average Intensity across\n all Wavelengths", 
                     "Standard deviation\n (Sum)", "Standard deviation\n (Average)"]
     row_titles = titles
@@ -259,7 +259,7 @@ def generate_output(sample_file, background_file, document_title):
     '''
     Main function for generating the PDF
     '''
-    print("Generating Output...")
+    print("\nGenerating Output...")
     with PdfPages(r"/home/frederique/PhysicsLabPythonCodes/Optrode/Records/{}.pdf".format(document_title)) as export_pdf:
 
         #Title page
@@ -271,26 +271,26 @@ def generate_output(sample_file, background_file, document_title):
         
         #The background file should be a Powermeter reading
         background_data = read_data(background_file[0])
-        intensities_b, times_b, wavelengths_b = [background_data[4]], [background_data[6]], [background_data[5]]
+        intensities_b, times_b, wavelengths_b = [background_data[4]], [background_data[5]], [background_data[7]]
         power_readings, pm_times = [background_data[2]], [background_data[3]]
 
         intensities, times, wavelengths, net_intensities, photodiodes, pd_times = [], [], [], [], [], []
         for i in range(num_files.get()):
             sample_data = read_data(sample_file[i]) 
+            adjust = 2
+            if len(sample_file[i]) == 8: #If the powermeter readings are included, adjusts to read the correct data
+                adjust = 0
             #List of lists with the data in order: Photodiode readings and times (0, 1), Powermeter readings and times (2, 3), Spectrometer intensities, times and wavelengths (4, 5, 6)
             #If there is no Powermeter readings the data will be in the order: Photodiode readings and times (0, 1), Spectrometer intensities, times and wavelengths (2, 3, 4)
             #It may be necessary to adjust these indices, depending on how the Optrode saves the data
-            adjust = 2
-            if len(sample_data) == 7: #powermeter is connected
-                adjust = 0
             intensities.append(sample_data[4-adjust])
             times.append(sample_data[5-adjust])
-            wavelengths.append(sample_data[6-adjust])
+            wavelengths.append(sample_data[7-adjust])
             net_intensity = np.subtract(sample_data[4-adjust], intensities_b[0])
             net_intensities.append(net_intensity)
 
-            photodiodes.append(sample_data[2-adjust])
-            pd_times.append(sample_data[3-adjust])
+            photodiodes.append(sample_data[0])
+            pd_times.append(sample_data[1])
 
         #Completes plots
         photodiode_plots(photodiodes, pd_times, export_pdf, file_titles)

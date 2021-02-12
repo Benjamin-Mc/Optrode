@@ -78,7 +78,6 @@ June 24, 2016
 import time
 import seabreeze.spectrometers as sb
 
-
 class DetectSpectrometer:
     ''' ************** Detection of the OceanOptics spectrumeter **************** '''
     def __init__(self):
@@ -87,7 +86,7 @@ class DetectSpectrometer:
             if len(sb.list_devices()) == 0:
                 print ("No spectrometer is detected! \n")
                 self.Error = 1
-                return         
+                return
             else:
                 self.detect()
         except Exception, e:
@@ -96,12 +95,10 @@ class DetectSpectrometer:
                 print ('Unplug the spectrometer and then plug again, then close the python command line and reopen it.')
                 self.Error = 1
                 return
-        #return             
-    
-    
-    
+        #return
+
     def detect(self):
-        try:                 
+        try:
             devices = sb.list_devices()
             sb.Spectrometer(devices[0]).close()
             self.Handle = sb.Spectrometer(devices[0])
@@ -114,7 +111,7 @@ class DetectSpectrometer:
             return
         except Exception, e:
             if  (e.message == 'Device already opened.'):
-                #print ('Device will be reseted')                        
+                #print ('Device will be reseted')
                 #self.reset()
                 print ('Error: ' + e.message)
                 print ('Unplug the spectrometer and then plug again')
@@ -126,7 +123,7 @@ class DetectSpectrometer:
                 print (e.message)
                 print ('Please unplug the spectrometer and then plug again. Then close the python command line and reopen it. ')
                 #return
-            self.Error = 1    
+            self.Error = 1
             print('Openning spectrometer failed!')
             return
 
@@ -145,19 +142,15 @@ class DetectSpectrometer:
             self.Handle = sb.Spectrometer(devices[0])
         self.clear()
 
-
     def setIntegrationTime(self, Integration_time):
         ''' Setting the integration time (microseconds) '''
         self.Handle.integration_time_micros(Integration_time)
         time.sleep(0.01)
 
-
     def setTriggerMode(self, Trigger_mode):
         ''' Setting the triggering mode (e.g., free running or external trigger) '''
         self.Handle.trigger_mode(Trigger_mode)
         time.sleep(0.01)
-
-
 
     def readIntensity(self, Correct_dark_counts, Correct_nonlinearity):
         ''' Reading the intensities.
@@ -166,11 +159,9 @@ class DetectSpectrometer:
         Intensities = self.Handle.intensities(correct_dark_counts=Correct_dark_counts, correct_nonlinearity=Correct_nonlinearity)
         return Intensities, time.time()
 
-
     def readWavelength(self):
         ''' Reading the wavelengthes of the spectrometer '''
         return self.Handle.wavelengths()
-
 
     def clear(self):
         for I in range(3):
@@ -180,7 +171,6 @@ class DetectSpectrometer:
             time.sleep(0.01)
             self.Handle.intensities(correct_dark_counts=True, correct_nonlinearity=True)
             time.sleep(0.01)
-
 
     def close(self):
         ''' Closing the device '''

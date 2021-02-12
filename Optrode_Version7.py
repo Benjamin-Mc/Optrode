@@ -263,7 +263,7 @@ def Continuous_Paradigm(continuous_integration_time, num_spec_samples, num_DAC_s
     if (Power_meter.Error == 0):
         Pros_Power.terminate()
 
-    print("duration of the measurement: {} second(s)".format(duration))
+    print("Duration of the measurement: {} second(s)".format(duration))
 
 def Begin_Test():
     '''
@@ -336,8 +336,8 @@ def Perform_Test():
     # Initialising the variables
     integration_list_ms = [] #Integration time for the spectrometer in ms
     for i in range(int(multi_integration_times.get())):
-        time = 2**(i+3) #Adds integration times 8, 16, 32, 64, 128... to the list of integration times
-        integration_list_ms.append(time)
+        t = 2**(i+3) #Adds integration times 8, 16, 32, 64, 128... to the list of integration times
+        integration_list_ms.append(t)
     Shutter_Delay = 4  #ms
 
     num_DAQ_Tests = 20000
@@ -377,6 +377,7 @@ def Perform_Test():
     #Sets number of samples to take for each type of measurement
     if (paradigm_mode.get() == 'c'): #Continuous paradigm
         num_spec_samples =  int(round(float(durationOfReading)/float(continuous_integration_time)))*1000
+        num_spec_samples = int(round(float(durationOfReading)*1000/float(continuous_integration_time)))
         num_DAC_samples = int(round(float(durationOfReading)/float(DAQ_SamplingRate)))+1000
     else: #Multi Integration
         num_spec_samples =  len(integration_list_ms) 
@@ -442,7 +443,7 @@ def Perform_Test():
             filename_prefix += "Multi "
         if is_suff.get() == 1: #If a suffix is desired, a timestamp is added to the name of the output data
             filename_suffix = str('%s' %datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d-%H-%M-%S'))+ ".hdf5"
-            Filename = filename_prefix + "- " + filename_middle + " - " + filename_suffix + ".hdf5"
+            Filename = filename_prefix + "- " + filename_middle + " - " + filename_suffix
         else:
             Filename = filename_prefix + "- " + filename_middle + ".hdf5"
 
@@ -541,8 +542,8 @@ def Perform_Test():
             plt.ylabel('Power (W)')
             plt.show()
 
-        print('\n')
-        print('Data is saved to the Records folder. \n')
+        #print('\n')
+        print('{} is saved to the Records folder. \n'.format(Filename))
 
         # Wait for user to decide what to do next -- Re-run, change or quit
         but3.config(state=NORMAL)
@@ -557,9 +558,6 @@ def Perform_Test():
             but1.config(state=NORMAL)
             Disable_UI(root, False)
             break
-
-def on_closing():
-    root.destroy()
 
 def Close_GUI():
     '''
@@ -757,8 +755,7 @@ if __name__ == "__main__":
     but3.grid(row=1, column=1, padx=10, pady=10)
     but4 = Button(frame6, text="Change", command=lambda: wait_var.set(2), state=DISABLED)
     but4.grid(row=1, column=2, padx=10, pady=10)
-    but5 = Button(frame6, text="Close", command=lambda: Close_GUI())
+    but5 = Button(frame6, text="Close", command=Close_GUI)
     but5.grid(row=1, column=3, padx=10, pady=10)
 
-    root.protocol("WM_DELETE_WINDOW", on_closing)
-    root.mainloop()
+root.mainloop()
