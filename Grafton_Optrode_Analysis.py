@@ -278,7 +278,7 @@ def generate_output(sample_file, background_file, document_title):
         for i in range(num_files.get()):
             sample_data = read_data(sample_file[i]) 
             adjust = 2
-            if len(sample_file[i]) == 8: #If the powermeter readings are included, adjusts to read the correct data
+            if len(sample_data) == 8: #If the powermeter readings are included, adjusts to read the correct data
                 adjust = 0
             #List of lists with the data in order: Photodiode readings and times (0, 1), Powermeter readings and times (2, 3), Spectrometer intensities, times and wavelengths (4, 5, 6)
             #If there is no Powermeter readings the data will be in the order: Photodiode readings and times (0, 1), Spectrometer intensities, times and wavelengths (2, 3, 4)
