@@ -7,10 +7,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import h5py
+import csv
 import math
 from matplotlib.backends.backend_pdf import PdfPages
-from Tkinter import *
-import tkFileDialog as filedialog
+import tkinter
+from tkinter import *
+from tkinter import filedialog
 
 def integral_plot(intensities, wavelengths, export_pdf, times, subtitle):
     '''
@@ -69,7 +71,7 @@ def photodiode_plots(photodiodes, times, export_pdf, titles):
 
 def powermeter_plots(power_readings, pm_times, export_pdf, title):
     '''
-    Plots the powermeter readings for the background file
+    Plots the powermeter readings for the powermeter file
     '''
     plt.figure()
     plt.plot(pm_times[0], power_readings[0], label=title)
@@ -79,7 +81,7 @@ def powermeter_plots(power_readings, pm_times, export_pdf, title):
     export_pdf.savefig()
     plt.close()
     
-def mainplots(intensities, wavelengths, export_pdf, page_heading, background, titles):
+def mainplots(intensities, wavelengths, export_pdf, page_heading, powermeter, titles):
     '''
     Plots the sum of intensities and average intensity against the wavelength range
     If the paradigm type is continuous - plots every 100th spectrum for each sample
@@ -87,7 +89,7 @@ def mainplots(intensities, wavelengths, export_pdf, page_heading, background, ti
     Calculates some output statistics for the plots, saves in a table
     '''
     #There may be multiple input files, background file always has one sample
-    if background == True:
+    if powermeter == True:
         num_samples = 1
     else:
         num_samples = num_files.get()
@@ -214,17 +216,17 @@ def mainplots(intensities, wavelengths, export_pdf, page_heading, background, ti
     export_pdf.savefig(dpi=1200)
     plt.close()
 
-    #Writes some output statistics for the plots
+    #Writes some output statistics for the plots (4 decimal points)
     col_titles = ["Sample", "Peak Value\n (Sum)", "Peak Value\n (Average)", "Average Intensity across\n all Wavelengths", 
                     "Standard deviation\n (Sum)", "Standard deviation\n (Average)"]
     row_titles = titles
     stats = [row_titles, [], [], [], [], []]
     for i in range(num_samples):
-        stats[1].append(max(sum_intensities[i]))
-        stats[2].append(max(avg_intensities[i]))
-        stats[3].append(sum(avg_intensities[i])/float(len(avg_intensities[i])))
-        stats[4].append(np.std(sum_intensities[i]))
-        stats[5].append(np.std(avg_intensities[i]))
+        stats[1].append(round(max(sum_intensities[i]), 4))
+        stats[2].append(round(max(avg_intensities[i]), 4))
+        stats[3].append(round(sum(avg_intensities[i])/float(len(avg_intensities[i])), 4))
+        stats[4].append(round(np.std(sum_intensities[i]), 4))
+        stats[5].append(round(np.std(avg_intensities[i]), 4))
 
     df = pd.DataFrame({col_titles[0]:stats[0], col_titles[1]:stats[1], col_titles[2]:stats[2], col_titles[3]:stats[3], col_titles[4]:stats[4], col_titles[5]:stats[5]}, columns=col_titles)
 
@@ -255,12 +257,12 @@ def read_data(filename):
             file_data.append(data[group][dataset][:]) # adding [:] returns a numpy array
     return file_data
 
-def generate_output(sample_file, background_file, document_title):
+def generate_output(sample_file, powermeter_file, background_file, document_title):
     '''
     Main function for generating the PDF
     '''
     print("\nGenerating Output...")
-    with PdfPages(r"/home/frederique/PhysicsLabPythonCodes/Optrode/Records/{}.pdf".format(document_title)) as export_pdf:
+    with PdfPages(r"C:\\Users\\benja\\OneDrive\\Documents\\20210325\\{}.pdf".format(document_title)) as export_pdf:
 
         #Title page
         plt.figure()
@@ -269,14 +271,15 @@ def generate_output(sample_file, background_file, document_title):
         export_pdf.savefig()
         plt.close()        
         
-        #The background file should be a Powermeter reading
+        #The powermeter file should be a Powermeter reading
+        powermeter_data = read_data(powermeter_file[0])
         background_data = read_data(background_file[0])
-        intensities_b, times_b, wavelengths_b = [background_data[4]], [background_data[5]], [background_data[7]]
-        power_readings, pm_times = [background_data[2]], [background_data[3]]
+        intensities_b, times_b, wavelengths_b = [background_data[2]], [background_data[3]], [background_data[5]]
+        power_readings, pm_times = [powermeter_data[2]], [powermeter_data[3]]
 
         intensities, times, wavelengths, net_intensities, photodiodes, pd_times = [], [], [], [], [], []
         for i in range(num_files.get()):
-            sample_data = read_data(sample_file[i]) 
+            sample_data = read_data(sample_file[i])
             adjust = 2
             if len(sample_data) == 8: #If the powermeter readings are included, adjusts to read the correct data
                 adjust = 0
@@ -292,6 +295,38 @@ def generate_output(sample_file, background_file, document_title):
             photodiodes.append(sample_data[0])
             pd_times.append(sample_data[1])
 
+            if paradigm_mode.get() == "c": #Output csv files for continuous paradigm
+                csv_title = file_titles[i] + ".csv" #Can add things to the title if desired - add before the .csv part
+                df = pd.DataFrame({"Wavelength" : wavelengths[i]})
+                for j in range(len(net_intensity[0])):
+                    df.insert(j+1, "Cont", net_intensity[:, j], True)
+                df.to_csv("C:\\Users\\benja\\OneDrive\\Documents\\20210325\\{}".format(csv_title), index=False, header=True)
+            else: #Multi integration
+                csv_title = file_titles[i] + ".csv"
+                df = pd.DataFrame({"Wavelength" : wavelengths[i]})
+                num_multi_integration = len(net_intensity[0, :])
+                integration_times = [] #Integration time for the spectrometer in ms
+                for k in range(num_multi_integration):
+                    time = 2**(k+3) #Adds integration times 8, 16, 32, 64, 128... to the list of integration times
+                    integration_times.append(time)
+                for j in range(len(net_intensity[0])):
+                    normalised_intensity = net_intensity[:, j] / float(integration_times[j])
+                    df.insert(j+1, str(integration_times[j]) + "ms", normalised_intensity, True)
+                df.to_csv("C:\\Users\\benja\\OneDrive\\Documents\\20210325\\{}".format(csv_title), index=False, header=True)
+
+        #Now do the median csv file
+        if paradigm_mode.get() == "m": #Only for multi integration
+            median_matrix = np.zeros(shape=(len(wavelengths[0]), len(net_intensities[0][0, :])))
+            df = pd.DataFrame({"Wavelength" : wavelengths[0]})
+            for k in range(len(net_intensities[0][0, :])):
+                for j in range(len(wavelengths[0])):
+                    sub_array = [net_intensities[i][j, k] for i in range(num_files.get())]
+                    sub_array.sort()
+                    median = sub_array[len(sub_array) // 2]
+                    median_matrix[j, k] = median / float(integration_times[k])
+                df.insert(k+1, str(integration_times[k]) + "ms", median_matrix[:, k], True)
+            df.to_csv("C:\\Users\\benja\\OneDrive\\Documents\\20210325\\Median.csv", index=False, header=True)
+            
         #Completes plots
         photodiode_plots(photodiodes, pd_times, export_pdf, file_titles)
         powermeter_plots(power_readings, pm_times, export_pdf, background_title)
@@ -319,35 +354,48 @@ def trim(f_list, f_titles, n):
     Adjust the names of the input parameters so that the program can read the correct files
     Adds the filenames to a list of titles for the plot labels
     
-    For example, will trim ('/home/frederique/PhysicsLabPythonCodes/Optrode/Records/Green Cont - Saline test 1.hdf5',) to:
-    filename: "/home/frederique/PhysicsLabPythonCodes/Optrode/Records/Green Cont - Saline test 1.hdf5"
+    For example, will trim ('C:\\Users\\benja\\OneDrive\\Documents\\20210325\\Green Cont - Saline test 1.hdf5',) to:
+    filename: "C:\\Users\\benja\\OneDrive\\Documents\\20210325\\Green Cont - Saline test 1.hdf5"
     filetitle: "Green Cont - Saline test 1"
     '''
+    if paradigm_mode.get() == "c":
+        keyword = "Cont - "
+        extra = 7
+    else:
+        keyword = "Multi - "
+        extra = 8
+
     for i in range(n):
-        start = f_list[i].find("/")
+        start = f_list[i].find("C") #Might need to change this based on how your operating system reads file 
         end = f_list[i].rfind("5")
         f_list[i] = f_list[i][start:end+1]
-        start2 = f_list[i].rfind("/")
+        start2 = f_list[i].rfind(keyword) #Looks for the paradigm mode to shorten the title
         end2 = f_list[i].rfind(".")
-        f_titles.append(f_list[i][start2+1:end2])
+        f_titles.append(f_list[i][start2+extra:end2])
 
 def browse(n):
     '''
     Allows user to browse directories for input data files
     '''
-    filenames = filedialog.askopenfilenames(initialdir="/home/frederique/PhysicsLabPythonCodes/Optrode/Records/", filetypes=(("HDF5 files", "*.hdf5"),))
+    filenames = filedialog.askopenfilenames(initialdir="C:\\Users\\benja\\OneDrive\\Documents\\20210325\\", filetypes=(("HDF5 files", "*.hdf5"),))
     if n == 1: #sample files
         sample_files.set(filenames)
         global file_list, file_titles
         file_list = sample_files.get().split(", ")
         file_titles = []
         trim(file_list, file_titles, num_files.get())
-    else: #background
+    elif n == 2: #background
         background_file.set(filenames)
         global background_list, background_title
         background_list = background_file.get().split(", ")
         background_title = []
         trim(background_list, background_title, 1)
+    else: #powermeter
+        powermeter_file.set(filenames)
+        global powermeter_list, powermeter_title
+        powermeter_list = powermeter_file.get().split(", ")
+        powermeter_title = []
+        trim(powermeter_list, powermeter_title, 1)
 
 def close_program():
     root.destroy()
@@ -355,14 +403,15 @@ def close_program():
 
 if __name__ == '__main__':
 
-    root = Tk()
+    root = tkinter.Tk()
     root.title("Linear Flow Fluorescence Analysis")
-    root.geometry("750x350")
+    root.geometry("750x450")
     root.grid_columnconfigure(0, weight=1)
 
     document_title = StringVar(value="Optrode Analysis") #Default value
     sample_files = StringVar(value="")
     background_file = StringVar(value="")
+    powermeter_file = StringVar(value="")
     paradigm_mode = StringVar(value="c") # Paradigm mode ('c' or 'm')
     integral_lower_bound = IntVar(value=505) #Bounds for integral plot
     integral_upper_bound = IntVar(value=550)
@@ -406,11 +455,14 @@ if __name__ == '__main__':
     bglbl = Label(frame2, text="Select Background Measurement: ", font=(None, 11))
     bglbl.grid(row=5, column=1, padx=28, pady=6, sticky=W)
 
+    pmlbl = Label(frame2, text="Select Powermeter Measurement: ", font=(None, 11))
+    pmlbl.grid(row=6, column=1, padx=28, pady=6, sticky=W)
+
     lblbl = Label(frame2, text="Integral Lower Bound: ", font=(None, 11))
-    lblbl.grid(row=6, column=1, padx=28, pady=6, sticky=W)
+    lblbl.grid(row=7, column=1, padx=28, pady=6, sticky=W)
 
     ublbl = Label(frame2, text="Integral Upper Bound: ", font=(None, 11))
-    ublbl.grid(row=7, column=1, padx=28, pady=6, sticky=W)
+    ublbl.grid(row=8, column=1, padx=28, pady=6, sticky=W)
 
     input_box0 = Entry(frame2, textvariable=document_title, width=40)
     input_box0.grid(row=0, column=2, padx=6)
@@ -424,24 +476,29 @@ if __name__ == '__main__':
     input_box2 = Entry(frame2, textvariable=background_file, width=40)
     input_box2.grid(row=5, column=2, padx=12)
 
-    input_box3 = Entry(frame2, textvariable=integral_lower_bound, width=15)
-    input_box3.grid(row=6, column=2, padx=12, sticky=W)
+    input_box3 = Entry(frame2, textvariable=powermeter_file, width=40)
+    input_box3.grid(row=6, column=2, padx=12)
 
-    input_box4 = Entry(frame2, textvariable=integral_upper_bound, width=15)
+    input_box4 = Entry(frame2, textvariable=integral_lower_bound, width=15)
     input_box4.grid(row=7, column=2, padx=12, sticky=W)
+
+    input_box5 = Entry(frame2, textvariable=integral_upper_bound, width=15)
+    input_box5.grid(row=8, column=2, padx=12, sticky=W)
 
     but1 = Button(frame2, text="Browse", command=lambda: browse(1))
     but1.grid(row=4, column=3)
     but2 = Button(frame2, text="Browse", command=lambda: browse(2))
     but2.grid(row=5, column=3)
+    but3 = Button(frame2, text="Browse", command=lambda: browse(3))
+    but3.grid(row=6, column=3)
 
     frame3 = Frame(root)
     frame3.grid(row=5, column=0)
 
-    but3 = Button(frame3, text="Start", command=lambda: generate_output(file_list, background_list, document_title.get()))
-    but3.grid(row=5, column=0, padx=10, pady=10)
+    but4 = Button(frame3, text="Start", command=lambda: generate_output(file_list, powermeter_list, background_list, document_title.get()))
+    but4.grid(row=5, column=0, padx=10, pady=10)
 
-    but4 = Button(frame3, text="Close", command=lambda: close_program())
-    but4.grid(row=5, column=1)
+    but5 = Button(frame3, text="Close", command=lambda: close_program())
+    but5.grid(row=5, column=1)
 
     root.mainloop()
